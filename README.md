@@ -8,17 +8,19 @@ When the main agent needs to understand 2+ files or any file over ~100 lines, it
 
 sidecar-mcp is a small stdio subprocess that sits next to your coding agent. Reads happen out-of-band to a cheap worker LLM, so the main agent's context stays small. Two install paths — both wired in under a minute.
 
-### A. From npm (after `npm publish`)
+### A. From npm (once the package is on the npm registry)
+
+The three blocks below use `claude mcp add` because it's the shortest way to register an MCP server — but `claude` here is **Claude Code's CLI**, nothing more. `sidecar-mcp` itself doesn't depend on Claude. The `SIDECAR_BACKEND=openai` env var picks which API the *worker* model uses; it's independent of the client. (For non-Claude clients, see **Wire into any MCP client** below.)
 
 ```bash
 # Ollama — local, free, no API key:
 claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- npx -y sidecar-mcp
 
 # OpenAI:
-claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY=sk-... -- npx -y sidecar-mcp
+claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY="$OPENAI_API_KEY" -- npx -y sidecar-mcp
 
 # Anthropic (or any Anthropic-compatible provider):
-claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY=sk-ant-... -- npx -y sidecar-mcp
+claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY="$ANTHROPIC_API_KEY" -- npx -y sidecar-mcp
 ```
 
 `npx -y sidecar-mcp` downloads and runs the published package on first call. No clone, no build, no `node_modules` to manage.
@@ -43,14 +45,18 @@ claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- node "$PWD/dist/index.js"
 
 ### Verify
 
-In Claude Code, ask: *"Use bulk_read to summarize README.md."* You should see `bulk_read` fire and return a tight summary. Every reply ends with a usage footer:
+In your MCP client (Claude Code shown), ask: *"Use bulk_read to summarize README.md."* You should see `bulk_read` fire and return a tight summary. Every reply ends with a usage footer (`tokens: <prompt> in / <completion> out`):
 
 ```
 ---
 sidecar: model=llama3.1:8b, backend=ollama, tokens=412 in / 87 out
 ```
 
-If `bulk_read` doesn't show up: `claude mcp list` should show `sidecar` as connected.
+If `bulk_read` doesn't show up:
+- **Claude Code**: `claude mcp list` should show `sidecar` as connected.
+- **VS Code Copilot**: Command Palette → "MCP: List Servers".
+- **Codex CLI**: `codex mcp list`.
+- **Cursor / Zed**: check the MCP panel in settings.
 
 ### Other clients (VS Code Copilot, Codex CLI, Cursor, Zed, …)
 
