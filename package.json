@@ -1,0 +1,43 @@
+{
+  "name": "sidecar-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that delegates bulk file reading to a cheap worker LLM, so the main agent's context stays small.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "sidecar-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dEMonaRE/sidecar-mcp.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "tsx demo/bulk-read.demo.ts",
+    "prepublishOnly": "pnpm build && pnpm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

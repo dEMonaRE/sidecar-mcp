@@ -1,0 +1,109 @@
+import { z } from 'zod';
+import type { BackendName } from './backends/types.js';
+
+const BackendNameSchema = z.enum(['ollama', 'openai', 'anthropic', 'fake']);
+
+const LogLevelSchema = z.enum(['error', 'info', 'debug']);
+
+const ConfigSchema = z
+  .object({
+    backend: BackendNameSchema,
+    model: z.string().min(1),
+    ollamaUrl: z.string().url(),
+    openaiUrl: z.string().url(),
+    openaiKey: z.string().optional(),
+    anthropicUrl: z.string().url(),
+    anthropicKey: z.string().optional(),
+    fileMaxBytes: z.number().int().positive(),
+    allowRoots: z.array(z.string().min(1)).min(1),
+    requestTimeoutMs: z.number().int().positive(),
+    logLevel: LogLevelSchema,
+  })
+  .superRefine((cfg, ctx) => {
+    if (cfg.backend === 'openai' && !cfg.openaiKey) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['openaiKey'],
+        message: 'SIDECAR_OPENAI_KEY is required when SIDECAR_BACKEND=openai',
+      });
+    }
+    if (cfg.backend === 'anthropic' && !cfg.anthropicKey) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anthropicKey'],
+        message: 'SIDECAR_ANTHROPIC_KEY is required when SIDECAR_BACKEND=anthropic',
+      });
+    }
+  });
+
+export type Config = z.infer<typeof ConfigSchema>;
+
+const DEFAULTS: Record<BackendName, string> = {
+  ollama: 'llama3.1:8b',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-3-5-haiku-latest',
+  fake: 'fake-model',
+};
+
+function parseRoots(raw: string | undefined): string[] {
+  const fallback = [process.cwd()];
+  if (!raw) return fallback;
+  const parts = raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  return parts.length > 0 ? parts : fallback;
+}
+
+export function loadConfig(): Config {
+  const backend = (process.env.SIDECAR_BACKEND ?? 'ollama') as BackendName;
+  const parsed = ConfigSchema.safeParse({
+    backend,
+    model: process.env.SIDECAR_MODEL ?? DEFAULTS[backend],
+    ollamaUrl: process.env.SIDECAR_OLLAMA_URL ?? 'http://127.0.0.1:11434',
+    openaiUrl: process.env.SIDECAR_OPENAI_URL ?? 'https://api.openai.com',
+    openaiKey: process.env.SIDECAR_OPENAI_KEY,
+    anthropicUrl: process.env.SIDECAR_ANTHROPIC_URL ?? 'https://api.anthropic.com',
+    anthropicKey: process.env.SIDECAR_ANTHROPIC_KEY,
+    fileMaxBytes: Number(process.env.SIDECAR_FILE_MAX_BYTES ?? 524288),
+    allowRoots: parseRoots(process.env.SIDECAR_ALLOW_ROOTS),
+    requestTimeoutMs: Number(process.env.SIDECAR_REQUEST_TIMEOUT_MS ?? 120000),
+    logLevel: (process.env.SIDECAR_LOG_LEVEL ?? 'info') as
+      | 'error'
+      | 'info'
+      | 'debug',
+  });
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`sidecar-mcp config error:\n${issues}`);
+  }
+  return parsed.data;
+}
+
+export function helpText(): string {
+  return `sidecar-mcp — env-var configuration
+
+  SIDECAR_BACKEND           ollama (default) | openai | anthropic | fake
+  SIDECAR_MODEL             override default model for the active backend
+                            defaults: ollama=llama3.1:8b  openai=gpt-4o-mini
+                                     anthropic=claude-3-5-haiku-latest
+
+  SIDECAR_OLLAMA_URL        default http://127.0.0.1:11434
+  SIDECAR_OPENAI_URL        default https://api.openai.com  (any OpenAI-compat)
+  SIDECAR_OPENAI_KEY        required when SIDECAR_BACKEND=openai
+  SIDECAR_ANTHROPIC_URL     default https://api.anthropic.com  (Anthropic-compat)
+  SIDECAR_ANTHROPIC_KEY     required when SIDECAR_BACKEND=anthropic
+
+  SIDECAR_FILE_MAX_BYTES    default 524288 (512 KB) — files larger are skipped
+  SIDECAR_ALLOW_ROOTS       comma-separated absolute paths; default = cwd
+  SIDECAR_REQUEST_TIMEOUT_MS default 120000
+  SIDECAR_LOG_LEVEL         error | info (default) | debug
+
+Examples:
+  SIDECAR_BACKEND=ollama                                  # local Ollama
+  SIDECAR_BACKEND=openai  SIDECAR_OPENAI_KEY=sk-...       # OpenAI
+  SIDECAR_BACKEND=anthropic SIDECAR_ANTHROPIC_KEY=sk-ant-...  # Anthropic-compatible
+`;
+}

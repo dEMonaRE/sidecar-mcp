@@ -1,0 +1,9 @@
+tests/
+demo/
+*.test.ts
+vitest.config.ts
+tsconfig.json
+tsconfig.build.json
+.gitignore
+.npmignore
+.github/
