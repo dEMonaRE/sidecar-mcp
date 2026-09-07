@@ -6,16 +6,55 @@ When the main agent needs to understand 2+ files or any file over ~100 lines, it
 
 ## Install
 
-```bash
-pnpm add -g sidecar-mcp
-# or: npm i -g sidecar-mcp
-```
+sidecar-mcp is a small stdio subprocess that sits next to your coding agent. Reads happen out-of-band to a cheap worker LLM, so the main agent's context stays small. Two install paths — both wired in under a minute.
 
-Then check what env vars you need:
+### A. From npm (after `npm publish`)
 
 ```bash
-sidecar-mcp --help
+# Ollama — local, free, no API key:
+claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- npx -y sidecar-mcp
+
+# OpenAI:
+claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY=sk-... -- npx -y sidecar-mcp
+
+# Anthropic (or any Anthropic-compatible provider):
+claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY=sk-ant-... -- npx -y sidecar-mcp
 ```
+
+`npx -y sidecar-mcp` downloads and runs the published package on first call. No clone, no build, no `node_modules` to manage.
+
+### B. From source (works today, no publish needed)
+
+```bash
+git clone https://github.com/dEMonaRE/sidecar-mcp.git
+cd sidecar-mcp
+pnpm install --frozen-lockfile
+pnpm build
+claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- node "$PWD/dist/index.js"
+```
+
+### Pick a backend
+
+| Backend | Cost | Needs |
+|---|---|---|
+| `ollama` | free, local | `ollama serve` + `ollama pull llama3.1:8b` |
+| `openai` | $$ | `SIDECAR_OPENAI_KEY` |
+| `anthropic` | $$ | `SIDECAR_ANTHROPIC_KEY` (works with Anthropic-compatible providers via `SIDECAR_ANTHROPIC_URL`) |
+
+### Verify
+
+In Claude Code, ask: *"Use bulk_read to summarize README.md."* You should see `bulk_read` fire and return a tight summary. Every reply ends with a usage footer:
+
+```
+---
+sidecar: model=llama3.1:8b, backend=ollama, tokens=412 in / 87 out
+```
+
+If `bulk_read` doesn't show up: `claude mcp list` should show `sidecar` as connected.
+
+### Other clients (VS Code Copilot, Codex CLI)
+
+See **Usage per platform** below for the JSON/TOML snippets.
 
 ## Configuration
 
