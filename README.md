@@ -52,9 +52,9 @@ sidecar: model=llama3.1:8b, backend=ollama, tokens=412 in / 87 out
 
 If `bulk_read` doesn't show up: `claude mcp list` should show `sidecar` as connected.
 
-### Other clients (VS Code Copilot, Codex CLI)
+### Other clients (VS Code Copilot, Codex CLI, Cursor, Zed, …)
 
-See **Usage per platform** below for the JSON/TOML snippets.
+`sidecar-mcp` speaks plain MCP stdio — the same primitive every MCP client consumes. The `claude mcp add` commands above are just Claude Code's CLI wrapper for the same config. See **Wire into any MCP client** below for the canonical shape and where each client stores it.
 
 ## Configuration
 
@@ -102,47 +102,59 @@ export SIDECAR_ANTHROPIC_KEY=sk-ant-...
 # export SIDECAR_ANTHROPIC_URL=https://your-anthropic-compatible-host
 ```
 
-## Usage per platform
+## Wire into any MCP client
 
-### Claude Code
+The MCP spec is the same everywhere — `sidecar-mcp` is a subprocess with a command and some env vars. Every MCP client wraps that primitive in its own config syntax, but the primitive itself doesn't change.
 
-In `~/.claude.json` or `.mcp.json`:
+**Canonical shape** (the only thing you actually need to know):
 
 ```json
 {
-  "mcpServers": {
+  "command": "npx -y sidecar-mcp",
+  "env": { "SIDECAR_BACKEND": "ollama" }
+}
+```
+
+For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`.
+
+**Where each client stores it:**
+
+| Client | Config location | Key |
+|---|---|---|
+| Claude Code | `~/.claude.json` or `.mcp.json` (or `claude mcp add …`) | `mcpServers` |
+| VS Code Copilot | `.vscode/settings.json` | `github.copilot.chat.mcp.servers` |
+| Codex CLI | `~/.codex/config.toml` | `[mcp_servers.X]` |
+| Cursor | `~/.cursor/mcp.json` | `mcpServers` |
+| Zed | `~/.config/zed/settings.json` | `context_servers` |
+| any other MCP client | see [modelcontextprotocol.io/clients](https://modelcontextprotocol.io/clients) | — |
+
+**Example — VS Code Copilot** (`.vscode/settings.json`):
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
     "sidecar": {
-      "command": "sidecar-mcp",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "sidecar-mcp"],
       "env": { "SIDECAR_BACKEND": "ollama" }
     }
   }
 }
 ```
 
-### VS Code (GitHub Copilot)
-
-In VS Code `settings.json`:
-
-```json
-"github.copilot.chat.mcp.servers": {
-  "sidecar": {
-    "type": "stdio",
-    "command": "sidecar-mcp",
-    "env": { "SIDECAR_BACKEND": "ollama" }
-  }
-}
-```
-
-### Codex CLI
-
-In `~/.codex/config.toml`:
+**Example — Codex CLI** (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.sidecar]
-command = "sidecar-mcp"
+command = "npx"
+args = ["-y", "sidecar-mcp"]
+
 [mcp_servers.sidecar.env]
 SIDECAR_BACKEND = "ollama"
 ```
+
+The `command`/`args` split varies by client (some take a single string, some take an array); the primitive above is what every client is configuring.
 
 ## Tool reference
 
