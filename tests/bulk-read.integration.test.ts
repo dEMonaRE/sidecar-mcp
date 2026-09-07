@@ -34,7 +34,9 @@ describe('bulk_read handler (integration)', () => {
 
       const result = await handler({ paths: [a, b], question: 'what?' });
 
-      expect(result.content).toEqual([{ type: 'text', text: 'fake summary' }]);
+      const text = result.content[0]!.text;
+      expect(text.startsWith('fake summary')).toBe(true);
+      expect(text).toMatch(/\n\n---\nsidecar:/);
       expect(backend.calls).toHaveLength(1);
       const prompt = backend.calls[0]!.user;
       expect(prompt).toContain(`<file path="${a}">`);
@@ -73,6 +75,23 @@ describe('bulk_read handler (integration)', () => {
         /no readable text files/,
       );
       expect(backend.calls).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('appends a usage footer with model + backend name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sidecar-int-'));
+    try {
+      const f = join(dir, 'a.txt');
+      writeFileSync(f, 'x');
+
+      const backend = createFakeBackend({ reply: 'body' });
+      const handler = makeBulkReadHandler(makeCfg([dir]), backend);
+      const result = await handler({ paths: [f], question: 'q' });
+
+      const text = result.content[0]!.text;
+      expect(text).toMatch(/^body\n\n---\nsidecar: model=fake-model, backend=fake, tokens: n\/a$/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

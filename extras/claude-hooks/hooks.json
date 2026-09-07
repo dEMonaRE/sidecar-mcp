@@ -1,0 +1,19 @@
+{
+  "_comment": "Paste this hooks block into ~/.claude/settings.json or .claude/settings.json. Replace <absolute-path> with the real path to extras/claude-hooks/ in your clone.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "command": "<absolute-path>/extras/claude-hooks/check-file-size" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "<absolute-path>/extras/claude-hooks/check-bash-read" }
+        ]
+      }
+    ]
+  }
+}

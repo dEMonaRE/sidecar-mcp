@@ -117,6 +117,15 @@ SIDECAR_BACKEND = "ollama"
 
 **Returns:** the worker's text summary. The full file content never appears in the caller's context.
 
+**Response footer:** every `bulk_read` reply ends with a one-line footer for cost spot-checks:
+
+```
+---
+sidecar: model=<model>, backend=<backend>, tokens=<in> in / <out> out
+```
+
+(or `tokens: n/a` if the backend didn't report usage). Footer is included automatically; no flag to disable in MVP.
+
 **Example call:**
 ```json
 {
@@ -163,7 +172,7 @@ The full file content stays between `sidecar-mcp` and the worker. The main agent
 
 - **Non-streaming.** Worker replies are returned as one text blob.
 - **No `code_write`.** Bulk boilerplate generation is out of scope for MVP. If you need it, build a separate tool.
-- **No Claude Code hook layer.** A separate companion plugin (`sidecar-claude`) can wire `bulk_read` into the agent's flow automatically — not in this repo.
+- **Claude Code hook layer is opt-in.** Auto-redirect of large `Read`/`Bash cat|head|tail` calls to `bulk_read` lives in `extras/claude-hooks/` and is **not** installed by default. See `extras/claude-hooks/README.md` to wire it into `~/.claude/settings.json`.
 - **`SIDECAR_ALLOW_ROOTS` defaults to cwd.** Files outside are skipped with a warning. Set explicitly for stricter scoping.
 
 ## Development

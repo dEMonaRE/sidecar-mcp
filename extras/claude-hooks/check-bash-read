@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# PreToolUse hook for Claude Code: block cat|head|tail|less|more on files
+# exceeding SIDECAR_MIN_LINES (default 350) and redirect to bulk_read.
+#
+# Reads JSON { tool_name, tool_input: { command } } on stdin.
+# Emits JSON on stdout (allow/deny shape matches check-file-size).
+#
+# Allow cases:
+#   - Piped (`|`) or redirected (`>`) commands — not reading into context.
+#   - Non-read commands (anything that isn't cat/head/tail/less/more).
+#   - Flags as args (e.g. `cat -n`) — treated as targeted.
+#   - File size ≤ threshold.
+#   - No file arg / nonexistent file.
+
+set -euo pipefail
+
+MIN_LINES="${SIDECAR_MIN_LINES:-350}"
+case "$MIN_LINES" in
+  ''|*[!0-9]*) MIN_LINES=350 ;;
+esac
+
+allow() {
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}\n'
+  exit 0
+}
+
+input=$(cat)
+command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+
+# Empty command or piped/redirected → allow.
+[ -z "$command" ] && allow
+printf '%s' "$command" | grep -q '|' && allow
+printf '%s' "$command" | grep -q '>' && allow
+
+# Not a known read command → allow.
+if ! printf '%s' "$command" | grep -qE '^(cat|head|tail|less|more) '; then
+  allow
+fi
+
+# Extract first non-flag argument as the file path.
+file_path=""
+args=$(printf '%s' "$command" | sed -E 's/^(cat|head|tail|less|more) +//')
+for arg in $args; do
+  case "$arg" in
+    -*) continue ;;
+    *) file_path=$(printf '%s' "$arg" | tr -d "'\"" ); break ;;
+  esac
+done
+
+[ -z "$file_path" ] || [ ! -f "$file_path" ] && allow
+
+lines=$(wc -l < "$file_path" 2>/dev/null | tr -d ' \t\n' || echo 0)
+lines=${lines:-0}
+
+if [ "$lines" -le "$MIN_LINES" ]; then
+  allow
+fi
+
+# Over threshold → deny + redirect.
+cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"File is ${lines} lines (threshold: ${MIN_LINES}). Use the MCP tool bulk_read with paths=['\"'\"'${file_path}'\"'\"'] and question='\"'\"'summarize this file'\"'\"' instead of cat/head/tail."}}
+EOF

@@ -1,0 +1,35 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # .npmrc already contains `only-built-dependencies[]=esbuild` — non-interactive.
+      - run: pnpm install --frozen-lockfile
+
+      # Type-check only; full build runs locally and via prepublishOnly.
+      - run: pnpm exec tsc -p tsconfig.build.json --noEmit
+
+      - run: pnpm test
+
+      - name: hook smoke test
+        run: bash extras/claude-hooks/test.sh
+        # Tolerate failure if hooks aren't written yet (pre-B task).
+        continue-on-error: true

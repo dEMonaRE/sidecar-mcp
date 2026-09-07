@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Backend } from '../backends/types.js';
+import type { Backend, ChatResponse } from '../backends/types.js';
 import { SYSTEM_PROMPT } from '../prompts.js';
 import { readFiles } from '../file-reader.js';
 import type { Config } from '../config.js';
@@ -47,15 +47,25 @@ export function makeBulkReadHandler(cfg: Config, backend: Backend) {
       ...(args.model !== undefined ? { model: args.model } : {}),
     });
 
+    const footer = formatUsageFooter(reply, backend.name);
+
     return {
       content: [
         {
           type: 'text' as const,
-          text: reply.text,
+          text: `${reply.text}${footer}`,
         },
       ],
     };
   };
+}
+
+function formatUsageFooter(reply: ChatResponse, backendName: string): string {
+  const u = reply.usage;
+  if (!u) {
+    return `\n\n---\nsidecar: model=${reply.model}, backend=${backendName}, tokens: n/a`;
+  }
+  return `\n\n---\nsidecar: model=${reply.model}, backend=${backendName}, tokens: ${u.promptTokens} in / ${u.completionTokens} out`;
 }
 
 function buildPrompt(

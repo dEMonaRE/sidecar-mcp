@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# PreToolUse hook for Claude Code: block full-file Read on files > SIDECAR_MIN_LINES
+# (default 350) and redirect the agent to the MCP tool `bulk_read`.
+#
+# Reads JSON { tool_name, tool_input: { file_path, offset?, limit? } } on stdin.
+# Emits JSON on stdout:
+#   - allow  → no-op, Claude proceeds with Read
+#   - deny   → Claude is told to call bulk_read instead
+#
+# Allow cases (we never block these):
+#   - Targeted reads (offset or limit set) — Claude already knows the slice.
+#   - Nonexistent file path — let Read report the error.
+#   - File size ≤ threshold.
+#
+# Deps: jq. Override threshold with SIDECAR_MIN_LINES env var.
+
+set -euo pipefail
+
+MIN_LINES="${SIDECAR_MIN_LINES:-350}"
+case "$MIN_LINES" in
+  ''|*[!0-9]*) MIN_LINES=350 ;;
+esac
+
+input=$(cat)
+
+file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+offset=$(printf '%s' "$input"   | jq -r '.tool_input.offset // empty')
+limit=$(printf '%s' "$input"    | jq -r '.tool_input.limit // empty')
+
+# Targeted read → allow.
+if [ -n "$offset" ] || [ -n "$limit" ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}\n'
+  exit 0
+fi
+
+# No path or missing file → allow (Read will report).
+if [ -z "$file_path" ] || [ ! -f "$file_path" ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}\n'
+  exit 0
+fi
+
+lines=$(wc -l < "$file_path" 2>/dev/null | tr -d ' \t\n' || echo 0)
+lines=${lines:-0}
+
+if [ "$lines" -le "$MIN_LINES" ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}\n'
+  exit 0
+fi
+
+# Over threshold → deny + redirect.
+cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"File is ${lines} lines (threshold: ${MIN_LINES}). Use the MCP tool bulk_read with paths=['\"'\"'${file_path}'\"'\"'] and question='\"'\"'summarize this file'\"'\"' instead of reading it directly. For exact content needed for editing, re-read with an offset/limit for just the section you need."}}
+EOF

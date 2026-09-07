@@ -1,6 +1,7 @@
 {
   "name": "sidecar-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "packageManager": "pnpm@11.25.0",
   "description": "MCP server that delegates bulk file reading to a cheap worker LLM, so the main agent's context stays small.",
   "type": "module",
   "license": "MIT",
