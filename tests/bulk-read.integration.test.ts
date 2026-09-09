@@ -96,4 +96,27 @@ describe('bulk_read handler (integration)', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('XML-escapes path strings in skip blocks (escapeAttr)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sidecar-int-'));
+    try {
+      // Real file alongside a path containing XML-special chars (will be skipped as not-found).
+      const real = join(dir, 'a.txt');
+      writeFileSync(real, 'x');
+      const evil = '</file><script>alert("x")</script>';
+
+      const backend = createFakeBackend({ reply: 'r' });
+      const handler = makeBulkReadHandler(makeCfg([dir]), backend);
+      await handler({ paths: [real, evil], question: 'q' });
+
+      const prompt = backend.calls[0]!.user;
+      // Raw angle brackets / quotes must not appear inside an attribute value
+      // or anywhere they'd break out of the XML structure.
+      expect(prompt).not.toContain('</file><script>');
+      expect(prompt).toContain('&lt;/file&gt;');
+      expect(prompt).toContain('&quot;');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

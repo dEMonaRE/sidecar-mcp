@@ -15,14 +15,20 @@ export const BulkReadInput = z.object({
 
 export type BulkReadArgs = z.infer<typeof BulkReadInput>;
 
+// SDK passes `(args, extra)` where extra contains a cancellation signal.
+// Duck-typed to avoid pulling generic RequestHandlerExtra<Req, Notif> into our types.
+interface ToolExtra {
+  signal?: AbortSignal;
+}
+
 export function makeBulkReadHandler(cfg: Config, backend: Backend) {
-  return async function handleBulkRead(rawArgs: unknown) {
+  return async function handleBulkRead(rawArgs: unknown, extra?: ToolExtra) {
     const parsed = BulkReadInput.safeParse(rawArgs);
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      throw new Error(
-        `Invalid bulk_read input: ${issue?.path.join('.') ?? '?'} — ${issue?.message ?? 'unknown'}`,
-      );
+      const issues = parsed.error.issues
+        .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('\n');
+      throw new Error(`Invalid bulk_read input:\n${issues}`);
     }
     const args = parsed.data;
 
@@ -41,11 +47,14 @@ export function makeBulkReadHandler(cfg: Config, backend: Backend) {
 
     const userPrompt = buildPrompt(oks, skips, args.question);
 
-    const reply = await backend.chat({
-      system: SYSTEM_PROMPT,
-      user: userPrompt,
-      ...(args.model !== undefined ? { model: args.model } : {}),
-    });
+    const reply = await backend.chat(
+      {
+        system: SYSTEM_PROMPT,
+        user: userPrompt,
+        ...(args.model !== undefined ? { model: args.model } : {}),
+      },
+      extra?.signal,
+    );
 
     const footer = formatUsageFooter(reply, backend.name);
 

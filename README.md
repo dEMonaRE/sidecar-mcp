@@ -8,9 +8,22 @@ When the main agent needs to understand 2+ files or any file over ~100 lines, it
 
 sidecar-mcp is a small stdio subprocess that sits next to your coding agent. Reads happen out-of-band to a cheap worker LLM, so the main agent's context stays small. Two install paths — both wired in under a minute.
 
-### A. From npm (once the package is on the npm registry)
+### Any MCP client (canonical)
 
-The three blocks below use `claude mcp add` because it's the shortest way to register an MCP server — but `claude` here is **Claude Code's CLI**, nothing more. `sidecar-mcp` itself doesn't depend on Claude. The `SIDECAR_BACKEND=openai` env var picks which API the *worker* model uses; it's independent of the client. (For non-Claude clients, see **Wire into any MCP client** below.)
+The MCP primitive is the same everywhere — a subprocess with a command and some env vars. Every client wraps it in its own config syntax. Pick your worker backend, set `SIDECAR_BACKEND` (and any keys), then plug this into your client's MCP config:
+
+```json
+{
+  "command": "npx -y sidecar-mcp",
+  "env": { "SIDECAR_BACKEND": "ollama" }
+}
+```
+
+For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`. See **Wire into any MCP client** below for client-specific config locations.
+
+### A. Claude Code CLI (once the package is on the npm registry)
+
+If you're on Claude Code, `claude mcp add` is the shortest path — it writes the same config for you. The `SIDECAR_BACKEND=*` env vars are independent of the client; `claude` here is just the CLI that registers the MCP server.
 
 ```bash
 # Ollama — local, free, no API key:
@@ -21,6 +34,7 @@ claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY="$OPENAI_
 
 # Anthropic (or any Anthropic-compatible provider):
 claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY="$ANTHROPIC_API_KEY" -- npx -y sidecar-mcp
+# Add -e SIDECAR_ANTHROPIC_URL=https://your-host for Anthropic-compatible proxies.
 ```
 
 `npx -y sidecar-mcp` downloads and runs the published package on first call. No clone, no build, no `node_modules` to manage.
@@ -58,10 +72,6 @@ If `bulk_read` doesn't show up:
 - **Codex CLI**: `codex mcp list`.
 - **Cursor / Zed**: check the MCP panel in settings.
 
-### Other clients (VS Code Copilot, Codex CLI, Cursor, Zed, …)
-
-`sidecar-mcp` speaks plain MCP stdio — the same primitive every MCP client consumes. The `claude mcp add` commands above are just Claude Code's CLI wrapper for the same config. See **Wire into any MCP client** below for the canonical shape and where each client stores it.
-
 ## Configuration
 
 `sidecar-mcp` reads everything from env vars. No config file. No CLI flags (MCP stdio can't pass them).
@@ -76,7 +86,7 @@ If `bulk_read` doesn't show up:
 | `SIDECAR_ANTHROPIC_URL` | `https://api.anthropic.com` | any Anthropic-compatible endpoint |
 | `SIDECAR_ANTHROPIC_KEY` | _required for anthropic_ | also accepts Anthropic-compatible providers |
 | `SIDECAR_FILE_MAX_BYTES` | `524288` (512 KB) | files larger are skipped + reported |
-| `SIDECAR_ALLOW_ROOTS` | cwd | comma-separated absolute paths |
+| `SIDECAR_ALLOW_ROOTS` | cwd (with stderr warning) | comma-separated absolute paths; see **Security** |
 | `SIDECAR_REQUEST_TIMEOUT_MS` | `120000` | |
 | `SIDECAR_LOG_LEVEL` | `info` | `error` \| `info` \| `debug` |
 
@@ -207,7 +217,7 @@ What does this service do?
 ## How it works
 
 ```
-main agent (Claude Sonnet — expensive)
+main agent (whatever MCP client you wired it into)
    │
    │  MCP stdio JSON-RPC:
    │  {"method":"tools/call","params":{"name":"bulk_read", ...}}
@@ -216,7 +226,7 @@ sidecar-mcp subprocess
    │
    │  reads files, wraps in XML, POSTs to:
    ▼
-worker model (Ollama 8B / GPT-4o-mini / Claude Haiku — cheap)
+worker model (any configured backend — Ollama / OpenAI / Anthropic / proxy — cheap)
    │
    │  returns ~600 token summary
    ▼
@@ -224,6 +234,17 @@ back to main agent as tool result
 ```
 
 The full file content stays between `sidecar-mcp` and the worker. The main agent only ever sees the summary.
+
+## Security
+
+`bulk_read` reads files from the local filesystem and ships their content to the worker LLM. Two layers scope what the worker can see:
+
+- **`SIDECAR_ALLOW_ROOTS`** is a comma-separated allowlist of absolute paths. Anything outside is skipped with `path outside allowed roots`. If unset, sidecar-mcp defaults to the current working directory and prints a one-line warning to stderr at boot. Set it explicitly for any non-dev use.
+- **Symlink escape is blocked.** Every file is checked both lexically (path prefix) and via `realpath` (canonical target). A symlink inside `allowRoots` that points outside is rejected with `path resolves outside allowed roots (symlink escape)`. `allowRoots` are also realpath'd, so `/var` vs `/private/var` style mounts collapse consistently.
+
+Per-file safety: `SIDECAR_FILE_MAX_BYTES` (default 512 KB) skips oversize files, NUL-byte sniff skips binaries, and the worker's reply is the only thing that returns to the MCP client — the main agent's context never holds raw file content.
+
+**Cwd default is a footgun.** Launching from `$HOME` exposes `~/.ssh`, `~/.aws`, `.env` to the worker. For any deployment, set `SIDECAR_ALLOW_ROOTS` to a tight scope (e.g. the project root) instead of relying on the default.
 
 ## Limitations
 

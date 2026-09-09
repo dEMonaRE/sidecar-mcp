@@ -6,11 +6,12 @@ import {
   BulkReadInput,
   makeBulkReadHandler,
 } from './tools/bulk-read.js';
+import pkg from '../package.json' with { type: 'json' };
 
 export function buildServer(cfg: Config, backend: Backend): McpServer {
   const server = new McpServer({
     name: 'sidecar-mcp',
-    version: '0.1.0',
+    version: pkg.version,
   });
 
   const handle = makeBulkReadHandler(cfg, backend);
@@ -20,7 +21,9 @@ export function buildServer(cfg: Config, backend: Backend): McpServer {
     BULK_READ_DESCRIPTION,
     // zod schema → JSON Schema for the wire format
     BulkReadInput.shape,
-    handle as (args: unknown) => Promise<{ content: Array<{ type: 'text'; text: string }> }>,
+    // SDK passes (args, extra) — extra.signal is forwarded to the backend
+    // so client-side cancellation actually kills the in-flight request.
+    handle,
   );
 
   return server;

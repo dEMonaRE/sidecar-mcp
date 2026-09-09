@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOpenAIBackend } from '../src/backends/openai.js';
+import { abortableFetchMock } from './abort-helper.js';
 
 const cfg = {
   baseUrl: 'https://api.openai.com',
@@ -43,5 +44,23 @@ describe('OpenAI backend', () => {
       name: 'BackendError',
       kind: 'rate_limit',
     });
+  });
+
+  it('times out when the worker never responds', async () => {
+    vi.stubGlobal('fetch', abortableFetchMock());
+    const backend = createOpenAIBackend({ ...cfg, requestTimeoutMs: 50 });
+    await expect(backend.chat({ system: 's', user: 'q' })).rejects.toMatchObject({
+      name: 'BackendError',
+      kind: 'timeout',
+    });
+  });
+
+  it('honors client-side AbortSignal', async () => {
+    vi.stubGlobal('fetch', abortableFetchMock());
+    const backend = createOpenAIBackend({ ...cfg, requestTimeoutMs: 60_000 });
+    const ctrl = new AbortController();
+    const p = backend.chat({ system: 's', user: 'q' }, ctrl.signal);
+    setTimeout(() => ctrl.abort(), 5);
+    await expect(p).rejects.toMatchObject({ name: 'BackendError', kind: 'timeout' });
   });
 });

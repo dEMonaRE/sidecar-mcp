@@ -1,6 +1,6 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { isPathInside } from './utils/path.js';
+import { isPathInside, realpathSafe } from './utils/path.js';
 
 export type FileResult =
   | { kind: 'ok'; path: string; content: string }
@@ -14,18 +14,15 @@ export interface ReadOptions {
 const BINARY_PEEK_BYTES = 8192;
 
 export async function readFiles(paths: string[], opts: ReadOptions): Promise<FileResult[]> {
-  const results: FileResult[] = [];
-  for (const rawPath of paths) {
-    results.push(await readOne(rawPath, opts));
-  }
-  return results;
+  return Promise.all(paths.map((rawPath) => readOne(rawPath, opts)));
 }
 
 async function readOne(rawPath: string, opts: ReadOptions): Promise<FileResult> {
   const abs = resolve(rawPath);
 
-  // Path traversal check: must be under one of allowRoots.
-  if (!opts.allowRoots.some((root) => isPathInside(abs, resolve(root)))) {
+  // Cheap lexical rejection first — no I/O for obviously-bad paths.
+  const lexicallyInside = opts.allowRoots.some((root) => isPathInside(abs, resolve(root)));
+  if (!lexicallyInside) {
     return { kind: 'skip', path: rawPath, reason: 'path outside allowed roots' };
   }
 
@@ -35,6 +32,23 @@ async function readOne(rawPath: string, opts: ReadOptions): Promise<FileResult> 
     size = st.size;
   } catch (err) {
     return { kind: 'skip', path: rawPath, reason: `stat failed: ${(err as Error).message}` };
+  }
+
+  // Symlink-escape check: the lexical path can pass while the realpath target
+  // points outside allowRoots. Resolve and re-check.
+  let canonical: string;
+  try {
+    canonical = await realpath(abs);
+  } catch (err) {
+    return { kind: 'skip', path: rawPath, reason: `realpath failed: ${(err as Error).message}` };
+  }
+  const realRoots = await Promise.all(opts.allowRoots.map(realpathSafe));
+  if (!realRoots.some((root) => isPathInside(canonical, root))) {
+    return {
+      kind: 'skip',
+      path: rawPath,
+      reason: 'path resolves outside allowed roots (symlink escape)',
+    };
   }
 
   if (size === 0) {
@@ -51,7 +65,7 @@ async function readOne(rawPath: string, opts: ReadOptions): Promise<FileResult> 
 
   let buf: Buffer;
   try {
-    buf = await readFile(abs);
+    buf = await readFile(canonical);
   } catch (err) {
     return { kind: 'skip', path: rawPath, reason: `read failed: ${(err as Error).message}` };
   }

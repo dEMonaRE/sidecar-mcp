@@ -81,4 +81,34 @@ describe('readFiles', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('returns ok with empty content for a zero-byte file', async () => {
+    const dir = makeTmpDir();
+    try {
+      const file = join(dir, 'empty.txt');
+      writeFileSync(file, '');
+      const results = await readFiles([file], { allowRoots: [dir], maxBytes: 1024 });
+      expect(results).toEqual([{ kind: 'ok', path: file, content: '' }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads invalid UTF-8 with lossy replacement (does not throw)', async () => {
+    const dir = makeTmpDir();
+    try {
+      const file = join(dir, 'bad.txt');
+      // 0xff 0xfe are not valid UTF-8 leading bytes.
+      writeFileSync(file, Buffer.from([0xff, 0xfe, 0x68, 0x69]));
+      const results = await readFiles([file], { allowRoots: [dir], maxBytes: 1024 });
+      expect(results[0]?.kind).toBe('ok');
+      if (results[0]?.kind === 'ok') {
+        // Lossy decode replaces invalid bytes with U+FFFD then keeps valid "hi".
+        expect(results[0].content).toContain('�');
+        expect(results[0].content).toContain('hi');
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

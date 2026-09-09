@@ -1,3 +1,4 @@
+import { realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 /**
@@ -12,4 +13,16 @@ export function isPathInside(child: string, parent: string): boolean {
     if (c[i] !== p[i]) return false;
   }
   return true;
+}
+
+/**
+ * Resolve a path to its canonical (symlink-resolved) form.
+ * Falls back to lexical resolve if realpath fails (broken link, missing dir).
+ */
+export async function realpathSafe(p: string): Promise<string> {
+  try {
+    return await realpath(p);
+  } catch {
+    return resolve(p);
+  }
 }

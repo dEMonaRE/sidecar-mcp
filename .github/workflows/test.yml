@@ -25,9 +25,10 @@ jobs:
       # Type-check only; full build runs locally and via prepublishOnly.
       - run: pnpm exec tsc -p tsconfig.build.json --noEmit
 
+      # Build the artifact so prepublishOnly failures surface here, not at publish time.
+      - run: pnpm build
+
       - run: pnpm test
 
       - name: hook smoke test
         run: bash extras/claude-hooks/test.sh
-        # Tolerate failure if hooks aren't written yet (pre-B task).
-        continue-on-error: true

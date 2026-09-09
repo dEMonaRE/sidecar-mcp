@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAnthropicBackend } from '../src/backends/anthropic.js';
+import { abortableFetchMock } from './abort-helper.js';
 
 const cfg = {
   baseUrl: 'https://api.anthropic.com',
@@ -53,5 +54,23 @@ describe('Anthropic backend', () => {
       name: 'BackendError',
       kind: 'auth',
     });
+  });
+
+  it('times out when the worker never responds', async () => {
+    vi.stubGlobal('fetch', abortableFetchMock());
+    const backend = createAnthropicBackend({ ...cfg, requestTimeoutMs: 50 });
+    await expect(backend.chat({ system: 's', user: 'q' })).rejects.toMatchObject({
+      name: 'BackendError',
+      kind: 'timeout',
+    });
+  });
+
+  it('honors client-side AbortSignal', async () => {
+    vi.stubGlobal('fetch', abortableFetchMock());
+    const backend = createAnthropicBackend({ ...cfg, requestTimeoutMs: 60_000 });
+    const ctrl = new AbortController();
+    const p = backend.chat({ system: 's', user: 'q' }, ctrl.signal);
+    setTimeout(() => ctrl.abort(), 5);
+    await expect(p).rejects.toMatchObject({ name: 'BackendError', kind: 'timeout' });
   });
 });

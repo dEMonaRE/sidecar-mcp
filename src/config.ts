@@ -47,12 +47,28 @@ const DEFAULTS: Record<BackendName, string> = {
 
 function parseRoots(raw: string | undefined): string[] {
   const fallback = [process.cwd()];
-  if (!raw) return fallback;
+  if (!raw) {
+    warnCwdDefault(fallback[0]!);
+    return fallback;
+  }
   const parts = raw
     .split(',')
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
-  return parts.length > 0 ? parts : fallback;
+  if (parts.length === 0) {
+    warnCwdDefault(fallback[0]!);
+    return fallback;
+  }
+  return parts;
+}
+
+function warnCwdDefault(cwd: string): void {
+  // stdout is reserved for MCP JSON-RPC; warn to stderr.
+  process.stderr.write(
+    `sidecar-mcp: SIDECAR_ALLOW_ROOTS is unset; defaulting to cwd (${cwd}). ` +
+      `The worker can read any file under that path, including ~/.ssh, ~/.aws, .env. ` +
+      `Set SIDECAR_ALLOW_ROOTS explicitly to scope what the worker sees.\n`,
+  );
 }
 
 export function loadConfig(): Config {
@@ -98,6 +114,7 @@ export function helpText(): string {
 
   SIDECAR_FILE_MAX_BYTES    default 524288 (512 KB) — files larger are skipped
   SIDECAR_ALLOW_ROOTS       comma-separated absolute paths; default = cwd
+                            (warns on stderr at boot; set explicitly for non-dev use)
   SIDECAR_REQUEST_TIMEOUT_MS default 120000
   SIDECAR_LOG_LEVEL         error | info (default) | debug
 
