@@ -2,7 +2,7 @@
 
 An MCP server that delegates bulk file reading to a cheap worker LLM, so the main agent's context stays small.
 
-When the main agent needs to understand 2+ files or any file over ~100 lines, it calls `bulk_read`. The full file content never enters the main agent's context — only the worker's summary does. Inspired by [Spotify's internal `shunt` plugin](https://github.com/spotify/portal-ai-plugins/tree/main/plugins/shunt), but generic and backend-pluggable.
+When the main agent needs to understand 2+ files or any file over ~100 lines, it calls `bulk_read`. The full file content never enters the main agent's context — only the worker's summary does.
 
 ## Install
 
@@ -14,12 +14,12 @@ The MCP primitive is the same everywhere — a subprocess with a command and som
 
 ```json
 {
-  "command": "npx -y sidecar-mcp",
+  "command": "npx -y @aemrezorlu/sidecar-mcp",
   "env": { "SIDECAR_BACKEND": "ollama" }
 }
 ```
 
-For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`. See **Wire into any MCP client** below for client-specific config locations.
+For a from-source install, swap `npx -y @aemrezorlu/sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`. See **Wire into any MCP client** below for client-specific config locations.
 
 ### A. Claude Code CLI (once the package is on the npm registry)
 
@@ -27,17 +27,17 @@ If you're on Claude Code, `claude mcp add` is the shortest path — it writes th
 
 ```bash
 # Ollama — local, free, no API key:
-claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- npx -y sidecar-mcp
+claude mcp add sidecar -e SIDECAR_BACKEND=ollama -- npx -y @aemrezorlu/sidecar-mcp
 
 # OpenAI:
-claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY="$OPENAI_API_KEY" -- npx -y sidecar-mcp
+claude mcp add sidecar -e SIDECAR_BACKEND=openai -e SIDECAR_OPENAI_KEY="$OPENAI_API_KEY" -- npx -y @aemrezorlu/sidecar-mcp
 
 # Anthropic (or any Anthropic-compatible provider):
-claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY="$ANTHROPIC_API_KEY" -- npx -y sidecar-mcp
+claude mcp add sidecar -e SIDECAR_BACKEND=anthropic -e SIDECAR_ANTHROPIC_KEY="$ANTHROPIC_API_KEY" -- npx -y @aemrezorlu/sidecar-mcp
 # Add -e SIDECAR_ANTHROPIC_URL=https://your-host for Anthropic-compatible proxies.
 ```
 
-`npx -y sidecar-mcp` downloads and runs the published package on first call. No clone, no build, no `node_modules` to manage.
+`npx -y @aemrezorlu/sidecar-mcp` downloads and runs the published package on first call. No clone, no build, no `node_modules` to manage.
 
 ### B. From source (works today, no publish needed)
 
@@ -86,6 +86,7 @@ If `bulk_read` doesn't show up:
 | `SIDECAR_ANTHROPIC_URL` | `https://api.anthropic.com` | any Anthropic-compatible endpoint |
 | `SIDECAR_ANTHROPIC_KEY` | _required for anthropic_ | also accepts Anthropic-compatible providers |
 | `SIDECAR_FILE_MAX_BYTES` | `524288` (512 KB) | files larger are skipped + reported |
+| `SIDECAR_TOTAL_MAX_BYTES` | `5242880` (5 MB) | bulk_read errors if total bytes across all readable files exceeds cap |
 | `SIDECAR_ALLOW_ROOTS` | cwd (with stderr warning) | comma-separated absolute paths; see **Security** |
 | `SIDECAR_REQUEST_TIMEOUT_MS` | `120000` | |
 | `SIDECAR_LOG_LEVEL` | `info` | `error` \| `info` \| `debug` |
@@ -126,12 +127,12 @@ The MCP spec is the same everywhere — `sidecar-mcp` is a subprocess with a com
 
 ```json
 {
-  "command": "npx -y sidecar-mcp",
+  "command": "npx -y @aemrezorlu/sidecar-mcp",
   "env": { "SIDECAR_BACKEND": "ollama" }
 }
 ```
 
-For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`.
+For a from-source install, swap `npx -y @aemrezorlu/sidecar-mcp` for `node /absolute/path/to/sidecar-mcp/dist/index.js`.
 
 **Where each client stores it:**
 
@@ -152,7 +153,7 @@ For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to
     "sidecar": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "sidecar-mcp"],
+      "args": ["-y", "@aemrezorlu/sidecar-mcp"],
       "env": { "SIDECAR_BACKEND": "ollama" }
     }
   }
@@ -164,7 +165,7 @@ For a from-source install, swap `npx -y sidecar-mcp` for `node /absolute/path/to
 ```toml
 [mcp_servers.sidecar]
 command = "npx"
-args = ["-y", "sidecar-mcp"]
+args = ["-y", "@aemrezorlu/sidecar-mcp"]
 
 [mcp_servers.sidecar.env]
 SIDECAR_BACKEND = "ollama"
