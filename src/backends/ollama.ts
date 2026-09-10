@@ -1,5 +1,6 @@
 import type { Backend, ChatRequest, ChatResponse } from './types.js';
 import { BackendError } from './types.js';
+import { anySignal, makeMapHttpError, safeText } from './http-helpers.js';
 
 interface OllamaConfig {
   baseUrl: string;
@@ -9,15 +10,14 @@ interface OllamaConfig {
 
 export function createOllamaBackend(cfg: OllamaConfig): Backend {
   const base = cfg.baseUrl.replace(/\/+$/, '');
+  const mapHttpError = makeMapHttpError('Ollama');
 
   async function chat(req: ChatRequest, signal?: AbortSignal): Promise<ChatResponse> {
     const model = req.model ?? cfg.defaultModel;
     const url = `${base}/api/chat`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), cfg.requestTimeoutMs);
-    const combined = signal
-      ? anySignal([signal, controller.signal])
-      : controller.signal;
+    const combined = signal ? anySignal([signal, controller.signal]) : controller.signal;
 
     try {
       const res = await fetch(url, {
@@ -65,32 +65,4 @@ export function createOllamaBackend(cfg: OllamaConfig): Backend {
   }
 
   return { name: 'ollama', chat };
-}
-
-function mapHttpError(status: number, body: string): BackendError {
-  if (status === 401 || status === 403) return new BackendError('auth', `Ollama auth failed (${status}): ${body}`, status);
-  if (status === 429) return new BackendError('rate_limit', `Ollama rate-limited (${status}): ${body}`, status);
-  return new BackendError('http', `Ollama HTTP ${status}: ${body}`, status);
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return await res.text();
-  } catch {
-    return '<no body>';
-  }
-}
-
-/** Combine multiple AbortSignals into one (fires when any fires). */
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  const ctrl = new AbortController();
-  const onAbort = () => ctrl.abort();
-  for (const s of signals) {
-    if (s.aborted) {
-      ctrl.abort();
-      break;
-    }
-    s.addEventListener('abort', onAbort, { once: true });
-  }
-  return ctrl.signal;
 }

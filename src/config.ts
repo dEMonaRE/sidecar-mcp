@@ -14,9 +14,10 @@ const ConfigSchema = z
     openaiKey: z.string().optional(),
     anthropicUrl: z.string().url(),
     anthropicKey: z.string().optional(),
-    fileMaxBytes: z.number().int().positive(),
+    fileMaxBytes: z.coerce.number().int().positive().default(524288),
+    totalMaxBytes: z.coerce.number().int().positive().default(5 * 1024 * 1024),
     allowRoots: z.array(z.string().min(1)).min(1),
-    requestTimeoutMs: z.number().int().positive(),
+    requestTimeoutMs: z.coerce.number().int().positive().default(120000),
     logLevel: LogLevelSchema,
   })
   .superRefine((cfg, ctx) => {
@@ -81,13 +82,11 @@ export function loadConfig(): Config {
     openaiKey: process.env.SIDECAR_OPENAI_KEY,
     anthropicUrl: process.env.SIDECAR_ANTHROPIC_URL ?? 'https://api.anthropic.com',
     anthropicKey: process.env.SIDECAR_ANTHROPIC_KEY,
-    fileMaxBytes: Number(process.env.SIDECAR_FILE_MAX_BYTES ?? 524288),
+    fileMaxBytes: process.env.SIDECAR_FILE_MAX_BYTES,
+    totalMaxBytes: process.env.SIDECAR_TOTAL_MAX_BYTES,
     allowRoots: parseRoots(process.env.SIDECAR_ALLOW_ROOTS),
-    requestTimeoutMs: Number(process.env.SIDECAR_REQUEST_TIMEOUT_MS ?? 120000),
-    logLevel: (process.env.SIDECAR_LOG_LEVEL ?? 'info') as
-      | 'error'
-      | 'info'
-      | 'debug',
+    requestTimeoutMs: process.env.SIDECAR_REQUEST_TIMEOUT_MS,
+    logLevel: process.env.SIDECAR_LOG_LEVEL ?? 'info',
   });
   if (!parsed.success) {
     const issues = parsed.error.issues
@@ -113,6 +112,8 @@ export function helpText(): string {
   SIDECAR_ANTHROPIC_KEY     required when SIDECAR_BACKEND=anthropic
 
   SIDECAR_FILE_MAX_BYTES    default 524288 (512 KB) — files larger are skipped
+  SIDECAR_TOTAL_MAX_BYTES   default 5242880 (5 MB) — bulk_read errors if total
+                            bytes across all readable files exceeds this cap
   SIDECAR_ALLOW_ROOTS       comma-separated absolute paths; default = cwd
                             (warns on stderr at boot; set explicitly for non-dev use)
   SIDECAR_REQUEST_TIMEOUT_MS default 120000

@@ -45,6 +45,15 @@ export function makeBulkReadHandler(cfg: Config, backend: Backend) {
       throw new Error(`no readable text files:\n${reasons}`);
     }
 
+    const totalBytes = oks.reduce((n, f) => n + Buffer.byteLength(f.content, 'utf8'), 0);
+    if (totalBytes > cfg.totalMaxBytes) {
+      throw new Error(
+        `prompt would be ${totalBytes} bytes across ${oks.length} files; ` +
+          `cap is ${cfg.totalMaxBytes} (SIDECAR_TOTAL_MAX_BYTES). ` +
+          `Narrow \`paths\` or raise the cap.`,
+      );
+    }
+
     const userPrompt = buildPrompt(oks, skips, args.question);
 
     const reply = await backend.chat(

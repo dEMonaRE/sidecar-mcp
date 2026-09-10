@@ -1,5 +1,6 @@
 import type { Backend, ChatRequest, ChatResponse } from './types.js';
 import { BackendError } from './types.js';
+import { anySignal, makeMapHttpError, safeText } from './http-helpers.js';
 
 interface AnthropicConfig {
   baseUrl: string;
@@ -17,15 +18,14 @@ interface AnthropicConfig {
  */
 export function createAnthropicBackend(cfg: AnthropicConfig): Backend {
   const base = cfg.baseUrl.replace(/\/+$/, '');
+  const mapHttpError = makeMapHttpError('Anthropic');
 
   async function chat(req: ChatRequest, signal?: AbortSignal): Promise<ChatResponse> {
     const model = req.model ?? cfg.defaultModel;
     const url = `${base}/v1/messages`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), cfg.requestTimeoutMs);
-    const combined = signal
-      ? anySignal([signal, controller.signal])
-      : controller.signal;
+    const combined = signal ? anySignal([signal, controller.signal]) : controller.signal;
 
     try {
       const res = await fetch(url, {
@@ -74,31 +74,4 @@ export function createAnthropicBackend(cfg: AnthropicConfig): Backend {
   }
 
   return { name: 'anthropic', chat };
-}
-
-function mapHttpError(status: number, body: string): BackendError {
-  if (status === 401 || status === 403) return new BackendError('auth', `Anthropic auth failed (${status}): ${body}`, status);
-  if (status === 429) return new BackendError('rate_limit', `Anthropic rate-limited (${status}): ${body}`, status);
-  return new BackendError('http', `Anthropic HTTP ${status}: ${body}`, status);
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return await res.text();
-  } catch {
-    return '<no body>';
-  }
-}
-
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  const ctrl = new AbortController();
-  const onAbort = () => ctrl.abort();
-  for (const s of signals) {
-    if (s.aborted) {
-      ctrl.abort();
-      break;
-    }
-    s.addEventListener('abort', onAbort, { once: true });
-  }
-  return ctrl.signal;
 }

@@ -7,6 +7,7 @@ import { createOpenAIBackend } from './backends/openai.js';
 import { createAnthropicBackend } from './backends/anthropic.js';
 import { createFakeBackend } from './backends/fake.js';
 import type { Backend } from './backends/types.js';
+import pkg from '../package.json' with { type: 'json' };
 
 function selectBackend(cfg: ReturnType<typeof loadConfig>): Backend {
   switch (cfg.backend) {
@@ -41,6 +42,10 @@ async function main(): Promise<void> {
     process.stderr.write(helpText() + '\n');
     process.exit(0);
   }
+  if (process.argv.includes('--version') || process.argv.includes('-v')) {
+    process.stdout.write(`sidecar-mcp ${pkg.version}\n`);
+    process.exit(0);
+  }
 
   const cfg = loadConfig();
   const backend = selectBackend(cfg);
@@ -50,7 +55,6 @@ async function main(): Promise<void> {
   await server.connect(transport);
 
   // Keep process alive; transport owns the lifecycle.
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   await new Promise<never>(() => {});
 }
 

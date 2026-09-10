@@ -14,6 +14,7 @@ function makeCfg(allowRoots: string[]): Config {
     openaiUrl: 'https://api.openai.com',
     anthropicUrl: 'https://api.anthropic.com',
     fileMaxBytes: 1024,
+    totalMaxBytes: 5 * 1024 * 1024,
     allowRoots,
     requestTimeoutMs: 5000,
     logLevel: 'info',
